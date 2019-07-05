@@ -130,7 +130,7 @@ def main_loop(time_limit):
 if __name__ == "__main__":
   if len(sys.argv) < 2:
     print("Chamada invalida. Uso correto:")
-    print("python tp3.py [tempo_limite_execucao_segundos]")
+    print("python prototype.py [tempo_limite_execucao_segundos]")
     sys.exit()
   
   time_limit = int(sys.argv[1])
