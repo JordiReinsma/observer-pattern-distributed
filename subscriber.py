@@ -3,11 +3,18 @@ from circle import *
 import sys
 import time
 import multiprocessing as mp
-
+import pickle
 import os
 os.environ["SDL_VIDEO_CENTERED"] = "1"
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame as gui
+import socket
+
+ipSubscriber = "0.0.0.0" #não modificar
+portSubscriber = 5050
+
+ipPublisher = "0.0.0.0"
+portPublisher = 5454
 
 # Inicializacao da GUI
 gui.init()
@@ -27,29 +34,19 @@ def draw_circle(circle):
   number = font.render(str(circle.id), False, BLACK)
   screen.blit(number, circle.pos)
 
-class Subscriber:
-  def __init__(self, name):
-    self.name = name
-  
-  def subscribe(self, address, port):
-    'SE REGISTRA NO PUBLISHER ESPECIFICADO VIA SOCKET'
-    
-    'QUANDO ESTIVER REGISTRADO, PEDE A LISTA TODA DE CIRCULOS'
-    global circle_list
-    circle_list = circles
-  
-  def receive(self, op, circle):
-    if op == 1:
-      'CRIOU-SE CIRCULO'
-    elif op == 2:
-      'ALTEROU-SE CIRCULO'
-    elif op == 3:
-      'DELETOU-SE CIRCULO'
 
 # Execucao da GUI, que fica executando
 # ate alguem fechar a janela, apertar ESC
 # ou se atingir o tempo limite
+
 def draw_loop(time_limit):
+  global ipSubscriber,portSubscriber,ipPublisher,portPublisher
+  tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  dest = (str(ipPublisher), int(portPublisher))
+  tcp.connect(dest)
+  tcp.send("1")
+  tcp.close() 
+
   screen.fill(WHITE)
   gui.display.update()
   
@@ -57,16 +54,18 @@ def draw_loop(time_limit):
   time_begin = time.time()
   
   while running:
-    # circle_op = random.uniform(0.0, 1.0)
-    # if circle_op < 0.2:
-      # number_circles += 1
-      # create_circle(number_circles)
-    # if circle_op < 0.8:
-      # update_circle()
-    # else:
-      # delete_circle()
-    'ESCUTA NOTIFY DO SUBJECT E FAZ UMA DAS ACOES ACIMA'
     
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    orig = (str(ipSubscriber),int(portSubscriber))
+    tcp.setsockopt(socket .SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tcp.bind(orig)
+    tcp.listen(1)
+    objSocket, ipSubscriber = tcp.accept()
+    msg = objSocket.recv(8096)
+    circle_list = pickle.loads(msg)
+    tcp.close()
+
+
     screen.fill(WHITE)
     
     for circle in circle_list:
@@ -85,6 +84,11 @@ def draw_loop(time_limit):
       running = False
   
   # Termina programa
+  tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  dest = (str(ipPublisher), int(portPublisher))
+  tcp.connect(dest)
+  tcp.send("2")
+  tcp.close()
   gui.quit()
 
 # Funcao main

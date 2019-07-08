@@ -2,15 +2,18 @@ from circle import *
 
 import sys
 import time
-import multiprocessing as mp
-
+from multiprocessing import Process
+import socket
+import pickle
 # Inicializacao do queue, para sincronizacao
-# das variaveis entre os multiprocessos
-q = mp.Queue()
+# das variaveis entre os multiprocesso
+
 
 # Numero inicial de circulos
 NUMBER_CIRCLES = 120
-
+ipPublisher = "0.0.0.0" #não modificar
+portPublisher = 5454
+portSubscriber = 5050 
 # Inicializacao da lista de circulos
 circle_list = [Circle(i) for i in range(NUMBER_CIRCLES)]
 
@@ -19,7 +22,7 @@ circle_list = [Circle(i) for i in range(NUMBER_CIRCLES)]
 OP_CREATE = 0.2
 OP_UPDATE = 0.6 + OP_CREATE
 OP_DELETE = 0.2 + OP_UPDATE
-
+subscribers = set()
 def create_circle():
   global NUMBER_CIRCLES
   circle_list.append(Circle(NUMBER_CIRCLES))
@@ -43,29 +46,38 @@ def delete_circle():
     print("Circle %5d [D]eleted!" % id)
     return Circle(id - 1)
 
-class Publisher():
-  def __init__(self, name):
-    self.name = name
-    self.subscribers = set()
-  
-  # Para registrar novo assinante
-  def register(self, who):
-    self.subscribers.add(who)
-  
-  # Remove assinante que deu timeout
-  def unregister(self, who):
-    self.subscribers.discard(who)
-  
-  # Envia a lista de circulos para novo assinante
-  def initialize_new_subscriber(self, who):
-    'ENVIAR TODA A LISTA DE CIRCULOS PRA UM NOVO OBSERVER'
-    subscribers(who).initialize(op, circle_list)
-  
+
+def listenSubscribers():
+  global subscribers,ipPublisher,portPublisher
+  while(True):
+    print("Aguardando Subscriber")
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    orig = (str(ipPublisher), int(portPublisher))
+    tcp.setsockopt(socket .SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tcp.bind(orig)
+    tcp.listen(1)
+    objSocket, ipSubscriber = tcp.accept()
+    msg = objSocket.recv(1024)
+    tcp.close()
+    #1 para cadastrar subscriber no publisher ,2 para descadastrar o subscriber
+    if(str(msg) == "1"):
+      subscribers.add(ipPublisher)
+    elif(str(msg) == "2"):
+      subscribers.discard(ipSubscriber)
+
+
+
   # Cria/Atualiza/Deleta circulos
   # e notifica assinantes apenas das mudanças
-  def crud(self):
+
+numberOfModification = 0
+def crud():
+  global numberOfModification,portSubscriber,circle_list
+  while(True):
+    print("modificando circulo")
+    global numberOfModification
     chance = random.uniform(0.0, 1.0)
-    
+    numberOfModification += 1
     if chance <= OP_CREATE:
       op = 1
       circle = create_circle()
@@ -76,30 +88,24 @@ class Publisher():
       op = 3
       circle = delete_circle()
     
-    for subscriber in self.subscribers:
-      'ESTA FUNCAO PRECISA SER APRIMORADA VIA SOCKET'
-      subscriber.receive(op, circle)
 
-publisher = Publisher()
+    if(numberOfModification > NUMBER_CIRCLES / 10 ):
+      print("Enviando modificações")
+      tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      for subscriber in subscribers:
+        dest = (str(subscriber), int(portSubscriber))
+        tcp.connect(dest)
+        data = pickle.dumps(circle_list)
+        tcp.send(data)
+      numberOfModification = 0
+      tcp.close()
 
-def circle_CRUD_loop(time_limit):
-  running = True
-  time_begin = time.time()
-  
-  publisher.crud()
-    
-    if time.time() - time_begin > time_limit:
-      running = False
+if __name__ == '__main__':
+  crudOfPublisher = Process(target=crud, args=())
+  crudOfPublisher.start()
 
-# Funcao main
-if __name__ == "__main__":
-  if len(sys.argv) < 2:
-    print("Chamada invalida. Uso correto:")
-    print("python publisher.py [tempo_limite_execucao_segundos]")
-    sys.exit()
-  
-  time_limit = int(sys.argv[1])
-  
-  circle_CRUD_loop(time_limit)
-  
-  print('\nProgram ended with %d circles' % len(circle_list))
+  listen = Process(target=listenSubscribers, args=())
+  listen.start()
+
+
+
